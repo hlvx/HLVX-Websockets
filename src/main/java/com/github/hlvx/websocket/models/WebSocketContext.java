@@ -4,6 +4,9 @@ import com.github.hlvx.websocket.servers.WebSocketServer;
 import io.vertx.core.http.ServerWebSocket;
 import io.vertx.ext.auth.User;
 
+import java.util.HashMap;
+import java.util.Map;
+
 public class WebSocketContext {
     private User user;
     private final WebSocketServer server;

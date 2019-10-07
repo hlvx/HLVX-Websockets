@@ -1,6 +1,7 @@
 package com.github.hlvx.websocket.servers;
 
 import com.github.hlvx.websocket.annotations.BinaryCommand;
+import com.github.hlvx.websocket.annotations.Context;
 import com.github.hlvx.websocket.annotations.PermissionsAllowed;
 import com.github.hlvx.websocket.annotations.TextCommand;
 import com.github.hlvx.websocket.exceptions.BadPermissionsException;
@@ -29,6 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -153,6 +155,7 @@ public class WebSocketServer {
         Command command = commandMap.get(commandData.getCommand());
         if (command == null)
             throw new CommandNotRegisteredException(commandData.getCommand() + " is not a registered command.");
+        requestContext.registerObject(requestContext.getWebSocketContext().getUser());
         checkPermissions(command, requestContext).thenAccept(e -> {
             if (!e) {
                 Vertx.currentContext().runOnContext(ctx -> {
@@ -172,8 +175,8 @@ public class WebSocketServer {
 
     private void processAsync(Command command, RequestContext requestContext, ClientWriter clientWriter) {
         try {
-            ((Future<?>) command.getMethod().invoke(command.getParent(),
-                    requestContext.getCommandData().getData())).setHandler(result -> {
+            ((Future<?>) command.invoke(requestContext,
+                    new Object[] { requestContext.getCommandData().getData() })).setHandler(result -> {
                 if (result.failed()) throw new RuntimeException(result.cause());
                 Buffer buffer = Buffer.buffer();
                 requestContext.getWriter().writeData(result.result(), buffer);
@@ -187,8 +190,8 @@ public class WebSocketServer {
     private void processBlocking(Command command, RequestContext requestContext, ClientWriter clientWriter) {
         Vertx.vertx().executeBlocking(promise -> {
             try {
-                promise.complete(command.getMethod().invoke(command.getParent(),
-                        requestContext.getCommandData().getData()));
+                promise.complete(command.invoke(requestContext,
+                        new Object[] { requestContext.getCommandData().getData() }));
             } catch (IllegalAccessException | InvocationTargetException e) {
                 throw new RuntimeException(e);
             }
