@@ -50,7 +50,7 @@ public class RequestContext {
     }
 
     public void registerObject(Object obj) {
-        registeredObjects.put(obj.getClass(), obj);
+        if (obj != null) registeredObjects.put(obj.getClass(), obj);
     }
 
     public Object getRegisteredObject(Class<?> objType) {

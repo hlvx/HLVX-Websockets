@@ -56,6 +56,11 @@ public class WebSocketServer implements Closeable {
     private Writer textWriter = new JsonWriter();
     private Writer binaryWriter = new SimpleBinaryWriter();
     private HttpServer httpServer;
+    private final Vertx vertx;
+
+    public WebSocketServer(Vertx vertx) {
+        this.vertx = vertx;
+    }
 
     public void addServices(Object...services) {
         for (Object service : services) {
@@ -88,7 +93,7 @@ public class WebSocketServer implements Closeable {
     }
 
     public void start(int port, Handler<AsyncResult<HttpServer>> handler) {
-        httpServer = Vertx.vertx().createHttpServer()
+        httpServer = vertx.createHttpServer()
                 .websocketHandler(serverWebSocket -> {
                     if (connectHandler != null) connectHandler.handle(serverWebSocket);
                     Promise<Integer> promise = Promise.promise();
@@ -100,6 +105,10 @@ public class WebSocketServer implements Closeable {
                     serverWebSocket.closeHandler(v -> {
                         contexts.remove(serverWebSocket);
                         if (disconnectHandler != null) disconnectHandler.handle(serverWebSocket);
+                    });
+                    serverWebSocket.exceptionHandler(ex -> {
+                        serverWebSocket.close();
+                        throw new RuntimeException(ex);
                     });
                     serverWebSocket.textMessageHandler(txt -> handleTextMessage(serverWebSocket, txt));
                     serverWebSocket.binaryMessageHandler(buffer -> handleBinaryMessage(serverWebSocket, buffer));
@@ -152,27 +161,32 @@ public class WebSocketServer implements Closeable {
     }
 
     private void messageHandle(RequestContext requestContext, Map<?, Command> commandMap, ClientWriter clientWriter) {
-        CommandData commandData = requestContext.getReader().readData(requestContext.getData());
-        requestContext.setCommandData(commandData);
-        Command command = commandMap.get(commandData.getCommand());
-        if (command == null)
-            throw new CommandNotRegisteredException(commandData.getCommand() + " is not a registered command.");
-        requestContext.registerObject(requestContext.getWebSocketContext().getUser());
-        checkPermissions(command, requestContext).thenAccept(e -> {
-            if (!e) {
-                Vertx.currentContext().runOnContext(ctx -> {
-                    throw new RuntimeException(new BadPermissionsException("User not authorized to do that."));
+        try {
+            CommandData commandData = requestContext.getReader().readData(requestContext.getData());
+            requestContext.setCommandData(commandData);
+            Command command = commandMap.get(commandData.getCommand());
+            if (command == null)
+                throw new CommandNotRegisteredException(commandData.getCommand() + " is not a registered command.");
+            requestContext.registerObject(requestContext.getWebSocketContext().getUser());
+            checkPermissions(command, requestContext).thenAccept(e -> {
+                if (!e) {
+                    vertx.runOnContext(ctx -> {
+                        throw new RuntimeException(new BadPermissionsException("User not authorized to do that."));
+                    });
+                    return;
+                }
+                if (command.getReturnType().equals(Future.class)) processAsync(command, requestContext, clientWriter);
+                else processBlocking(command, requestContext, clientWriter);
+            }).exceptionally(ex -> {
+                vertx.runOnContext(e -> {
+                    throw new RuntimeException(ex);
                 });
-                return;
-            }
-            if (command.getReturnType().equals(Future.class)) processAsync(command, requestContext, clientWriter);
-            else processBlocking(command, requestContext, clientWriter);
-        }).exceptionally(ex -> {
-            Vertx.currentContext().runOnContext(e -> {
-                throw new RuntimeException(ex);
+                return null;
             });
-            return null;
-        });
+        } catch (Exception e) {
+            LOGGER.error("Exception catched", e);
+            requestContext.getWebSocketContext().getClient().close();
+        }
     }
 
     private void processAsync(Command command, RequestContext requestContext, ClientWriter clientWriter) {
@@ -190,7 +204,7 @@ public class WebSocketServer implements Closeable {
     }
 
     private void processBlocking(Command command, RequestContext requestContext, ClientWriter clientWriter) {
-        Vertx.vertx().executeBlocking(promise -> {
+        vertx.executeBlocking(promise -> {
             try {
                 promise.complete(command.invoke(requestContext,
                         new Object[] { requestContext.getCommandData().getData() }));
