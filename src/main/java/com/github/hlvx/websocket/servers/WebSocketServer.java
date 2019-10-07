@@ -17,6 +17,7 @@ import com.github.hlvx.websocket.models.CommandData;
 import com.github.hlvx.websocket.models.RequestContext;
 import com.github.hlvx.websocket.models.WebSocketContext;
 import io.vertx.core.AsyncResult;
+import io.vertx.core.Closeable;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
 import io.vertx.core.Promise;
@@ -42,7 +43,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 
-public class WebSocketServer {
+public class WebSocketServer implements Closeable {
     private Logger LOGGER = LoggerFactory.getLogger(WebSocketServer.class);
     private Map<ServerWebSocket, WebSocketContext> contexts = new ConcurrentHashMap<>();
     private Map<String, Command> textCommandHandlers = new HashMap<>();
@@ -54,6 +55,7 @@ public class WebSocketServer {
     private Reader<Buffer> binaryReader = new SimpleBinaryReader();
     private Writer textWriter = new JsonWriter();
     private Writer binaryWriter = new SimpleBinaryWriter();
+    private HttpServer httpServer;
 
     public void addServices(Object...services) {
         for (Object service : services) {
@@ -86,7 +88,7 @@ public class WebSocketServer {
     }
 
     public void start(int port, Handler<AsyncResult<HttpServer>> handler) {
-        Vertx.vertx().createHttpServer()
+        httpServer = Vertx.vertx().createHttpServer()
                 .websocketHandler(serverWebSocket -> {
                     if (connectHandler != null) connectHandler.handle(serverWebSocket);
                     Promise<Integer> promise = Promise.promise();
@@ -209,6 +211,11 @@ public class WebSocketServer {
 
     public void setHandshakeHandler(BiConsumer<ServerWebSocket, Handler<AsyncResult<Integer>>> handshakeHandler) {
         this.handshakeHandler = handshakeHandler;
+    }
+
+    @Override
+    public void close(Handler<AsyncResult<Void>> handler) {
+        httpServer.close(handler);
     }
 
     private interface ClientWriter {
