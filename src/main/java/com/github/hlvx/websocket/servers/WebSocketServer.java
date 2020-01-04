@@ -194,9 +194,11 @@ public class WebSocketServer implements Closeable {
             ((Future<?>) command.invoke(requestContext,
                     new Object[] { requestContext.getCommandData().getData() })).setHandler(result -> {
                 if (result.failed()) throw new RuntimeException(result.cause());
-                Buffer buffer = Buffer.buffer();
-                requestContext.getWriter().writeData(result.result(), buffer);
-                clientWriter.write(requestContext.getWebSocketContext().getClient(), buffer);
+                if (result.result() != null) {
+                    Buffer buffer = Buffer.buffer();
+                    requestContext.getWriter().writeData(result.result(), buffer);
+                    clientWriter.write(requestContext.getWebSocketContext().getClient(), buffer);
+                }
             });
         } catch (IllegalAccessException | InvocationTargetException ex) {
             throw new RuntimeException(ex);
@@ -213,9 +215,11 @@ public class WebSocketServer implements Closeable {
             }
         }, result -> {
             if (result.failed()) throw new RuntimeException(result.cause());
-            Buffer buffer = Buffer.buffer();
-            requestContext.getWriter().writeData(result.result(), buffer);
-            clientWriter.write(requestContext.getWebSocketContext().getClient(), buffer);
+            if (result.result() != null) {
+                Buffer buffer = Buffer.buffer();
+                requestContext.getWriter().writeData(result.result(), buffer);
+                clientWriter.write(requestContext.getWebSocketContext().getClient(), buffer);
+            }
         });
     }
 
