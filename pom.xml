@@ -57,7 +57,7 @@
         <jupiter-api-version>5.5.0</jupiter-api-version>
         <jupiter-engine-runner>5.5.0</jupiter-engine-runner>
         <jupiter-vintage-version>5.5.0</jupiter-vintage-version>
-        <vertx-version>3.8.1</vertx-version>
+        <vertx-version>4.5.24</vertx-version>
     </properties>
 
     <dependencies>
